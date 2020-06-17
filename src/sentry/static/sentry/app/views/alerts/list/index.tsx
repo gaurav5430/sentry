@@ -5,7 +5,7 @@ import flatten from 'lodash/flatten';
 import omit from 'lodash/omit';
 import styled from '@emotion/styled';
 
-import {IconAdd, IconSettings} from 'app/icons';
+import {IconAdd, IconSettings, IconCheckmark} from 'app/icons';
 import {Organization} from 'app/types';
 import {PageContent, PageHeader} from 'app/styles/organization';
 import {Panel, PanelBody, PanelHeader} from 'app/components/panels';
@@ -17,7 +17,7 @@ import AsyncComponent from 'app/components/asyncComponent';
 import FeatureBadge from 'app/components/featureBadge';
 import Button from 'app/components/button';
 import ButtonBar from 'app/components/buttonBar';
-import EmptyStateWarning from 'app/components/emptyStateWarning';
+import EmptyMessage from 'app/views/settings/components/emptyMessage';
 import ExternalLink from 'app/components/links/externalLink';
 import LoadingIndicator from 'app/components/loadingIndicator';
 import PageHeading from 'app/components/pageHeading';
@@ -28,6 +28,7 @@ import withOrganization from 'app/utils/withOrganization';
 import Access from 'app/components/acl/access';
 import ConfigStore from 'app/stores/configStore';
 import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
+import {promptsUpdate} from 'app/actionCreators/prompts';
 
 import {Incident} from '../types';
 import {TableLayout, TitleAndSparkLine} from './styles';
@@ -35,13 +36,17 @@ import AlertListRow from './row';
 
 const DEFAULT_QUERY_STATUS = 'open';
 
+const DOCS_URL =
+  'https://docs.sentry.io/workflow/alerts-notifications/alerts/?_ga=2.21848383.580096147.1592364314-1444595810.1582160976';
+
 type Props = {
   organization: Organization;
-  hasAlertRule?: boolean;
 } & RouteComponentProps<{orgId: string}, {}>;
 
 type State = {
   incidentList: Incident[];
+  hasAlertRule?: boolean;
+  firstVisitShown?: boolean;
 };
 
 const trackDocumentationClicked = (org: Organization) =>
@@ -66,9 +71,7 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
       [
         'incidentList',
         `/organizations/${params && params.orgId}/incidents/`,
-        {
-          query: {...query, status},
-        },
+        {query: {...query, status}},
       ],
     ];
   }
@@ -80,24 +83,47 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
       return;
     }
 
-    // Check if they have rules or not, to know which empty state message to display
-    const {params} = this.props;
+    // Check if they have rules or not, to know which empty state message to
+    // display
+    const {params, location, organization} = this.props;
 
-    try {
-      const alertRules = await this.api.requestPromise(
-        `/organizations/${params && params.orgId}/alert-rules/`,
-        {
-          method: 'GET',
-        }
-      );
-      this.setState({
-        hasAlertRule: alertRules.length > 0 ? true : false,
-      });
-    } catch (err) {
-      this.setState({
-        hasAlertRule: true, // endpoint failed, using true as the "safe" choice in case they actually do have rules
+    const alertRules = await this.api.requestPromise(
+      `/organizations/${params?.orgId}/alert-rules/`,
+      {
+        method: 'GET',
+        query: location.query,
+      }
+    );
+    const hasAlertRule = alertRules.length > 0;
+
+    // We've already configured alert rules, no need to check if we should show
+    // the "first time welcome" prompt
+    if (hasAlertRule) {
+      this.setState({hasAlertRule});
+      return;
+    }
+
+    // Check if they have already seen the prompt for the alert stream
+    const prompt = await this.api.requestPromise('/promptsactivity/', {
+      query: {
+        organization_id: organization.id,
+        feature: 'alert_stream',
+      },
+    });
+
+    const firstVisitShown = !prompt?.dismissed_ts;
+
+    if (firstVisitShown) {
+      // Prompt has not been seen, mark the prompt as seen immediately so they
+      // don't see it again
+      promptsUpdate(this.api, {
+        feature: 'alert_stream',
+        organizationId: organization.id,
+        status: 'dismissed',
       });
     }
+
+    this.setState({hasAlertRule, firstVisitShown});
   }
 
   /**
@@ -110,30 +136,60 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
     navigateTo(`/settings/${params.orgId}/projects/:projectId/alerts/new/`, router);
   };
 
-  renderEmpty() {
+  tryRenderFirstVisit() {
+    const {firstVisitShown} = this.state;
+
+    if (!firstVisitShown) {
+      return null;
+    }
+
+    return (
+      <WelcomeEmptyMessage
+        leftAligned
+        size="medium"
+        title={t('Find the signal in the noise')}
+        description={t(
+          'You’ve got 5 minutes, 2 million lines of code, and an inbox with 300 new messages. Alerts tell you what went wrong and why.'
+        )}
+        action={
+          <ButtonBar gap={1}>
+            <Button size="small" external href={DOCS_URL}>
+              View Features
+            </Button>
+            <AddAlertRuleButton {...this.props} />
+          </ButtonBar>
+        }
+      />
+    );
+  }
+
+  tryRenderEmpty() {
+    const {hasAlertRule, incidentList} = this.state;
     const {location} = this.props;
     const {query} = location;
     const status = getQueryStatus(query.status);
 
-    const hasAlertRule = this.state.hasAlertRule ? this.state.hasAlertRule : false;
+    if (incidentList.length > 0) {
+      return null;
+    }
 
     return (
-      <EmptyStateWarning>
-        <p>
-          <React.Fragment>
-            {tct('No [status] metric alerts. ', {
-              status: status === 'open' ? 'active' : 'resolved',
-            })}
-          </React.Fragment>
-          <React.Fragment>
-            {!hasAlertRule
-              ? tct('Start by [link:creating your first rule].', {
-                  link: <ExternalLink onClick={this.handleAddAlertRule} />,
-                })
-              : ''}
-          </React.Fragment>
-        </p>
-      </EmptyStateWarning>
+      <EmptyMessage
+        size="medium"
+        icon={<IconCheckmark isCircled size="48" />}
+        title={
+          !hasAlertRule
+            ? t('No metric alert rules exist for these projects.')
+            : status === 'open'
+            ? t(
+                'Everything’s a-okay. There are no unresolved metric alerts in these projects.'
+              )
+            : t('There are no resolved metric alerts in these projects.')
+        }
+        description={tct('Learn more about [link:Metric Alerts]', {
+          link: <ExternalLink href={DOCS_URL} />,
+        })}
+      />
     );
   }
 
@@ -142,7 +198,14 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
   }
 
   renderBody() {
-    const {loading, incidentList, incidentListPageLinks, hasAlertRule} = this.state;
+    const {
+      loading,
+      incidentList,
+      incidentListPageLinks,
+      hasAlertRule,
+      firstVisitShown,
+    } = this.state;
+
     const {orgId} = this.props.params;
     const allProjectsFromIncidents = new Set(
       flatten(incidentList?.map(({projects}) => projects))
@@ -157,24 +220,26 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
     return (
       <React.Fragment>
         <Panel>
-          <StyledPanelHeader>
-            <TableLayout status={status}>
-              <PaddedTitleAndSparkLine status={status}>
-                <div>{t('Alert')}</div>
-                {status === 'open' && <div>{t('Graph')}</div>}
-              </PaddedTitleAndSparkLine>
-              <div>{t('Project')}</div>
-              <div>{t('Triggered')}</div>
-              {status === 'closed' && <div>{t('Duration')}</div>}
-              {status === 'closed' && <div>{t('Resolved')}</div>}
-            </TableLayout>
-          </StyledPanelHeader>
-
-          <PanelBody>
-            {showLoadingIndicator && <LoadingIndicator />}
-            {!showLoadingIndicator && (
-              <React.Fragment>
-                {incidentList.length === 0 && this.renderEmpty()}
+          {!firstVisitShown && (
+            <StyledPanelHeader>
+              <TableLayout status={status}>
+                <PaddedTitleAndSparkLine status={status}>
+                  <div>{t('Alert')}</div>
+                  {status === 'open' && <div>{t('Graph')}</div>}
+                </PaddedTitleAndSparkLine>
+                <div>{t('Project')}</div>
+                <div>{t('Triggered')}</div>
+                {status === 'closed' && <div>{t('Duration')}</div>}
+                {status === 'closed' && <div>{t('Resolved')}</div>}
+              </TableLayout>
+            </StyledPanelHeader>
+          )}
+          {showLoadingIndicator ? (
+            <LoadingIndicator />
+          ) : (
+            this.tryRenderFirstVisit() ??
+            this.tryRenderEmpty() ?? (
+              <PanelBody>
                 <Projects orgId={orgId} slugs={Array.from(allProjectsFromIncidents)}>
                   {({initiallyLoaded, projects}) =>
                     incidentList.map(incident => (
@@ -189,9 +254,9 @@ class IncidentsList extends AsyncComponent<Props, State & AsyncComponent['state'
                     ))
                   }
                 </Projects>
-              </React.Fragment>
-            )}
-          </PanelBody>
+              </PanelBody>
+            )
+          )}
         </Panel>
         <Pagination pageLinks={incidentListPageLinks} />
       </React.Fragment>
@@ -264,27 +329,7 @@ class IncidentsListContainer extends React.Component<Props> {
               </StyledPageHeading>
 
               <Actions>
-                <Access organization={organization} access={['project:write']}>
-                  {({hasAccess}) => (
-                    <Button
-                      disabled={!hasAccess}
-                      title={
-                        !hasAccess
-                          ? t(
-                              'Users with admin permission or higher can create alert rules.'
-                            )
-                          : undefined
-                      }
-                      onClick={this.handleAddAlertRule}
-                      priority="primary"
-                      href="#"
-                      size="small"
-                      icon={<IconAdd isCircled size="xs" />}
-                    >
-                      {t('Add Alert Rule')}
-                    </Button>
-                  )}
-                </Access>
+                <AddAlertRuleButton {...this.props} />
 
                 <Button
                   onClick={this.handleNavigateToSettings}
@@ -316,19 +361,21 @@ class IncidentsListContainer extends React.Component<Props> {
 
             <Alert type="info" icon="icon-circle-info">
               {tct(
-                'This page is in beta and currently only shows [link:metric alerts]. ',
+                'This page is in beta and currently only shows [link:metric alerts]. [contactLink:Please contact us if you have any feedback.]',
                 {
                   link: (
                     <ExternalLink
                       onClick={() => trackDocumentationClicked(organization)}
-                      href="https://docs.sentry.io/workflow/alerts-notifications/alerts/"
+                      href={DOCS_URL}
                     />
+                  ),
+                  contactLink: (
+                    <ExternalLink href="mailto:alerting-feedback@sentry.io">
+                      {t('Please contact us if you have any feedback.')}
+                    </ExternalLink>
                   ),
                 }
               )}
-              <ExternalLink href="mailto:alerting-feedback@sentry.io">
-                {t('Please contact us if you have any feedback.')}
-              </ExternalLink>
             </Alert>
             <IncidentsList {...this.props} />
           </PageContent>
@@ -337,6 +384,32 @@ class IncidentsListContainer extends React.Component<Props> {
     );
   }
 }
+
+const AddAlertRuleButton = ({router, params, organization}: Props) => (
+  <Access organization={organization} access={['project:write']}>
+    {({hasAccess}) => (
+      <Button
+        disabled={!hasAccess}
+        title={
+          !hasAccess
+            ? t('Users with admin permission or higher can create alert rules.')
+            : undefined
+        }
+        onClick={e => {
+          e.preventDefault();
+
+          navigateTo(`/settings/${params.orgId}/projects/:projectId/alerts/new/`, router);
+        }}
+        priority="primary"
+        href="#"
+        size="small"
+        icon={<IconAdd isCircled size="xs" />}
+      >
+        {t('Add Alert Rule')}
+      </Button>
+    )}
+  </Access>
+);
 
 const StyledPageHeading = styled(PageHeading)`
   display: flex;
@@ -357,6 +430,11 @@ const Actions = styled('div')`
   align-items: center;
   grid-gap: ${space(1)};
   grid-auto-flow: column;
+`;
+
+const WelcomeEmptyMessage = styled(EmptyMessage)`
+  margin: ${space(4)};
+  max-width: 550px;
 `;
 
 export default withOrganization(IncidentsListContainer);
