@@ -586,11 +586,7 @@ exports[`SharedGroupDetails renders 1`] = `
                                     isCentered={false}
                                   >
                                     <div
-<<<<<<< HEAD
-                                      className="css-n08n7b-SectionHeader e1fbjd861"
-=======
                                       className="css-6uvec-SectionHeader e1fbjd862"
->>>>>>> fixed header width
                                       id="message"
                                     >
                                       <Permalink
@@ -598,19 +594,11 @@ exports[`SharedGroupDetails renders 1`] = `
                                         href="#message"
                                       >
                                         <a
-<<<<<<< HEAD
-                                          className="permalink css-rl8enl-Permalink e1fbjd860"
-                                          href="#message"
-                                        >
-                                          <em
-                                            className="icon-anchor"
-                                          />
-=======
-                                          className="permalink css-5r3te8-Permalink e1fbjd861"
+                                          className="permalink css-1ke0pjf-Permalink e1fbjd861"
                                           href="#message"
                                         >
                                           <StyledIconAnchor>
-                                            <ForwardRef
+                                            <IconAnchor
                                               className="css-1x65iks-StyledIconAnchor e1fbjd860"
                                             >
                                               <ForwardRef(SvgIcon)
@@ -628,12 +616,11 @@ exports[`SharedGroupDetails renders 1`] = `
                                                   />
                                                 </svg>
                                               </ForwardRef(SvgIcon)>
-                                            </ForwardRef>
+                                            </IconAnchor>
                                           </StyledIconAnchor>
                                           <h3>
                                             Message
                                           </h3>
->>>>>>> fixed header width
                                         </a>
                                       </Permalink>
                                     </div>
