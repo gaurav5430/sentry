@@ -117,7 +117,6 @@ const StyledIconAnchor = styled(IconAnchor)`
 `;
 
 const Permalink = styled('a')`
-  justify-content: flex-start;
   flex-grow: 1;
 
   :hover ${StyledIconAnchor} {
@@ -128,7 +127,6 @@ const Permalink = styled('a')`
 
 const SectionHeader = styled('div')<{isCentered?: boolean}>`
   display: flex;
-  justify-content: space-between;
   align-items: center;
   position: relative;
   margin-bottom: ${space(3)};
