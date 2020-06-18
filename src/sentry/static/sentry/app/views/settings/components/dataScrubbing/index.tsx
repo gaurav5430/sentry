@@ -239,7 +239,10 @@ class DataScrubbing<T extends ProjectId = undefined> extends React.Component<
   };
 
   handleToggleAddRuleModal = (showAddRuleModal: boolean) => () => {
-    this.setState({showAddRuleModal});
+    this.setState(prevState => ({
+      showAddRuleModal,
+      eventId: prevState.eventId?.status?.LOADED ? {value: ''} : prevState.eventId,
+    }));
   };
 
   handleUpdateEventId = (eventId: string) => {
