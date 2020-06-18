@@ -126,7 +126,7 @@ class Relays extends AsyncComponent<Props, State> {
         <ClassNames>
           {({css}) => (
             <PanelTable
-              emptyMessage={t('You have no relays configured')}
+              emptyMessage={t('No relays keys have been added yet.')}
               headers={[t('Display Name'), t('Relay Key'), t('Date Created'), '']}
               className={css`
                 grid-template-columns: repeat(3, auto) max-content;
