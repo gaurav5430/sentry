@@ -21,7 +21,7 @@ const EventIdFieldStatusIcon = ({status, onClickIconClose}: Props) => {
       return (
         <CloseIcon onClick={onClickIconClose}>
           <Tooltip title={t('Clear Event ID')}>
-            <IconClose color="red" />
+            <IconClose color="red400" />
           </Tooltip>
         </CloseIcon>
       );

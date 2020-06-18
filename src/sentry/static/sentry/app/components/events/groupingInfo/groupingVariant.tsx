@@ -219,7 +219,7 @@ const ContributionIcon = styled(({isContributing, ...p}) =>
   isContributing ? (
     <IconCheckmark size="sm" isCircled color="green400" {...p} />
   ) : (
-    <IconClose size="sm" isCircled color="red" {...p} />
+    <IconClose size="sm" isCircled color="red400" {...p} />
   )
 )`
   margin-right: ${space(1)};
